@@ -31,7 +31,9 @@ def get_client():
 def load_data():
     client = get_client()
     sheet = client.open_by_key(SHEET_ID).sheet1
-    return pd.DataFrame(sheet.get_all_records())
+    df = pd.DataFrame(sheet.get_all_records())
+    df = df.loc[:, ~df.columns.str.contains('auto_unique_id')]
+    return df
 
 def save_data(df):
     client = get_client()
@@ -74,68 +76,4 @@ try:
 
         col_exp1, col_exp2 = st.columns(2)
         with col_exp1:
-            buffer = BytesIO()
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                filtered.to_excel(writer, index=False)
-            st.download_button("📥 Export Excel", buffer.getvalue(), file_name="it_asset.xlsx")
-        with col_exp2:
-            st.download_button("📥 Export CSV", filtered.to_csv(index=False).encode('utf-8'), file_name="it_asset.csv")
-
-    # ── TAB 2 : CHART ──
-    with tab2:
-        c1, c2 = st.columns(2)
-        with c1:
-            status_df = df["Status"].value_counts().reset_index()
-            status_df.columns = ["Status", "Jumlah"]
-            fig1 = px.pie(status_df, names="Status", values="Jumlah",
-                          title="Distribusi Status Asset", hole=0.4)
-            st.plotly_chart(fig1, use_container_width=True)
-        with c2:
-            model_df = df["Model"].value_counts().reset_index()
-            model_df.columns = ["Model", "Jumlah"]
-            fig2 = px.bar(model_df, x="Model", y="Jumlah",
-                          title="Jumlah per Model", color="Jumlah")
-            st.plotly_chart(fig2, use_container_width=True)
-
-        bu_df = df["Bu Owner"].value_counts().reset_index()
-        bu_df.columns = ["Bu Owner", "Jumlah"]
-        fig3 = px.bar(bu_df, x="Bu Owner", y="Jumlah",
-                      title="Asset per BU", color="Bu Owner")
-        st.plotly_chart(fig3, use_container_width=True)
-
-    # ── TAB 3 : TAMBAH / EDIT / HAPUS ──
-    with tab3:
-        action = st.radio("Pilih Aksi", ["✏️ Edit Data", "➕ Tambah Data", "🗑️ Hapus Data"], horizontal=True)
-
-        if action == "✏️ Edit Data":
-            edited = st.data_editor(df, num_rows="fixed", use_container_width=True)
-            if st.button("💾 Simpan Perubahan"):
-                save_data(edited)
-                st.success("Data berhasil disimpan!")
-                st.rerun()
-
-        elif action == "➕ Tambah Data":
-            new_row = {}
-            cols = st.columns(3)
-            for i, col in enumerate(df.columns):
-                with cols[i % 3]:
-                    new_row[col] = st.text_input(col)
-            if st.button("➕ Tambah"):
-                save_data(pd.concat([df, pd.DataFrame([new_row])], ignore_index=True))
-                st.success("Data berhasil ditambahkan!")
-                st.rerun()
-
-        elif action == "🗑️ Hapus Data":
-            st.dataframe(df, use_container_width=True)
-            row_idx = st.number_input("Nomor baris yang dihapus (mulai dari 0)",
-                                      min_value=0, max_value=len(df)-1, step=1)
-            st.warning(f"Akan menghapus: {df.iloc[int(row_idx)].to_dict()}")
-            if st.button("🗑️ Hapus"):
-                save_data(df.drop(index=int(row_idx)).reset_index(drop=True))
-                st.success("Data berhasil dihapus!")
-                st.rerun()
-
-except Exception as e:
-    import traceback
-    st.error(f"Error: {e}")
-    st.code(traceback.format_exc())
+            buffe
