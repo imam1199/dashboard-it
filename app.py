@@ -65,7 +65,7 @@ MODEL_CODE = {
     "HP 240 G9": "HP-240G9",
     "HP 240 G4 G3-IAP": "HP-240G4",
     "HP 14-bw515AU": "HP-14BW",
-    "HP Aspire ES 11": "HP-ASPES11",
+    "Acer Aspire ES 11": "ACR-ASPES11",
     "HP ProBook 640 G4": "HP-PB640G4",
     "HP Latitude 5300": "HP-LAT5300",
     "HP 14-am503TU": "HP-14AM",
