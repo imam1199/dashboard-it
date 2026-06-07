@@ -5,6 +5,7 @@ import plotly.express as px
 from google.oauth2 import service_account
 from io import BytesIO
 import json
+import hashlib
 
 st.set_page_config(page_title="Dashboard IT Asset", layout="wide")
 
@@ -16,12 +17,74 @@ SCOPES = [
 SHEET_ID = "1msf4IK1ZJReQl5f_6VRbVCsGiJXcHUHENto1DqrQwkY"
 JSON_FILE = "dashboard-laptop-it-92f648a3958c.json"
 
-# ── LOGIN ──
-USERS = {
-    "admin": "admin123",
-    "it": "itumara2024",
-}
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
+@st.cache_resource
+def get_client():
+    try:
+        info = json.loads(st.secrets["gcp_json"])
+    except:
+        with open(JSON_FILE, 'r') as f:
+            info = json.load(f)
+    creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+    return gspread.authorize(creds)
+
+def get_users_sheet():
+    client = get_client()
+    spreadsheet = client.open_by_key(SHEET_ID)
+    try:
+        return spreadsheet.worksheet("users")
+    except:
+        # Buat sheet users kalau belum ada
+        sheet = spreadsheet.add_worksheet(title="users", rows=100, cols=3)
+        sheet.append_row(["username", "password", "role"])
+        # Tambah default admin
+        sheet.append_row(["admin", hash_password("admin123"), "admin"])
+        sheet.append_row(["it", hash_password("itumara2024"), "user"])
+        return sheet
+
+@st.cache_data(ttl=10)
+def load_users():
+    sheet = get_users_sheet()
+    data = sheet.get_all_records()
+    return pd.DataFrame(data) if data else pd.DataFrame(columns=["username", "password", "role"])
+
+def save_user(username, password, role="user"):
+    sheet = get_users_sheet()
+    users_df = load_users()
+    if username in users_df["username"].values:
+        # Update password
+        cell = sheet.find(username)
+        sheet.update_cell(cell.row, 2, hash_password(password))
+    else:
+        sheet.append_row([username, hash_password(password), role])
+    load_users.clear()
+
+def delete_user(username):
+    sheet = get_users_sheet()
+    cell = sheet.find(username)
+    if cell:
+        sheet.delete_rows(cell.row)
+    load_users.clear()
+
+def verify_user(username, password):
+    users_df = load_users()
+    if users_df.empty:
+        return False
+    user_row = users_df[users_df["username"] == username]
+    if user_row.empty:
+        return False
+    return user_row.iloc[0]["password"] == hash_password(password)
+
+def get_user_role(username):
+    users_df = load_users()
+    user_row = users_df[users_df["username"] == username]
+    if user_row.empty:
+        return "user"
+    return user_row.iloc[0]["role"]
+
+# ── LOGIN ──
 def login():
     st.title("🔐 Login Dashboard IT Asset")
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -29,9 +92,10 @@ def login():
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         if st.button("Login", use_container_width=True):
-            if username in USERS and USERS[username] == password:
+            if verify_user(username, password):
                 st.session_state["logged_in"] = True
                 st.session_state["username"] = username
+                st.session_state["role"] = get_user_role(username)
                 st.rerun()
             else:
                 st.error("Username atau password salah!")
@@ -65,6 +129,7 @@ MODEL_CODE = {
     "HP 240 G9": "HP-240G9",
     "HP 240 G4 G3-IAP": "HP-240G4",
     "HP 14-bw515AU": "HP-14BW",
+    "HP Aspire ES 11": "HP-ASPES11",
     "Aspire ES 11": "ACR-ASPES11",
     "HP ProBook 640 G4": "HP-PB640G4",
     "HP Latitude 5300": "HP-LAT5300",
@@ -87,16 +152,6 @@ def generate_asset_numbers(df):
         counters[code] = counters.get(code, 0) + 1
         new_no_aset.append(f"{code}-{counters[code]:03d}")
     return new_no_aset
-
-@st.cache_resource
-def get_client():
-    try:
-        info = json.loads(st.secrets["gcp_json"])
-    except:
-        with open(JSON_FILE, 'r') as f:
-            info = json.load(f)
-    creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
-    return gspread.authorize(creds)
 
 @st.cache_data(ttl=30)
 def load_data():
@@ -141,7 +196,6 @@ with col_logout:
 try:
     df = load_data()
 
-    # ── SUMMARY ──
     total = len(df)
     dipakai = len(df[df["Status"].str.lower().str.contains("pakai", na=False)])
     rusak = len(df[df["Status"].str.lower().str.contains("rusak", na=False)])
@@ -159,11 +213,12 @@ try:
 
     perlu_servis = df[df["Status"].str.lower().str.contains("perbaikan|rusak", na=False)]
 
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📋 Data",
         "📊 Chart",
         "➕ Tambah / Edit / Hapus",
-        f"⚠️ Perlu Perhatian ({len(perlu_servis)})"
+        f"⚠️ Perlu Perhatian ({len(perlu_servis)})",
+        "⚙️ Settings"
     ])
 
     # ── TAB 1 : DATA ──
@@ -279,6 +334,76 @@ try:
             st.dataframe(
                 perlu_servis[["No Aset", "Model", "Serial Number", "User", "Bu Owner", "Status", "Notes"]],
                 use_container_width=True
+            )
+
+    # ── TAB 5 : SETTINGS ──
+    with tab5:
+        st.subheader("⚙️ Pengaturan Akun")
+        current_user = st.session_state["username"]
+        is_admin = st.session_state.get("role") == "admin"
+
+        # Ganti password sendiri
+        st.markdown("### 🔑 Ganti Password")
+        col1, col2 = st.columns(2)
+        with col1:
+            old_pass = st.text_input("Password Lama", type="password", key="old_pass")
+            new_pass = st.text_input("Password Baru", type="password", key="new_pass")
+            confirm_pass = st.text_input("Konfirmasi Password Baru", type="password", key="confirm_pass")
+            if st.button("Simpan Password"):
+                if not verify_user(current_user, old_pass):
+                    st.error("Password lama salah!")
+                elif new_pass != confirm_pass:
+                    st.error("Password baru tidak cocok!")
+                elif len(new_pass) < 6:
+                    st.error("Password minimal 6 karakter!")
+                else:
+                    save_user(current_user, new_pass, st.session_state.get("role", "user"))
+                    st.success("Password berhasil diubah!")
+
+        # Kelola user (khusus admin)
+        if is_admin:
+            st.divider()
+            st.markdown("### 👥 Kelola User (Admin Only)")
+
+            col3, col4 = st.columns(2)
+            with col3:
+                st.markdown("**Tambah User Baru**")
+                new_username = st.text_input("Username Baru", key="new_username")
+                new_user_pass = st.text_input("Password", type="password", key="new_user_pass")
+                new_user_role = st.selectbox("Role", ["user", "admin"], key="new_user_role")
+                if st.button("➕ Tambah User"):
+                    users_df = load_users()
+                    if new_username in users_df["username"].values:
+                        st.error("Username sudah ada!")
+                    elif len(new_username) < 3:
+                        st.error("Username minimal 3 karakter!")
+                    elif len(new_user_pass) < 6:
+                        st.error("Password minimal 6 karakter!")
+                    else:
+                        save_user(new_username, new_user_pass, new_user_role)
+                        st.success(f"User '{new_username}' berhasil ditambahkan!")
+                        st.rerun()
+
+            with col4:
+                st.markdown("**Hapus User**")
+                users_df = load_users()
+                user_list = [u for u in users_df["username"].tolist() if u != "admin"]
+                if user_list:
+                    del_user = st.selectbox("Pilih User", options=user_list)
+                    if st.button("🗑️ Hapus User"):
+                        delete_user(del_user)
+                        st.success(f"User '{del_user}' berhasil dihapus!")
+                        st.rerun()
+                else:
+                    st.info("Tidak ada user lain selain admin.")
+
+            st.divider()
+            st.markdown("**Daftar User Aktif**")
+            users_df = load_users()
+            st.dataframe(
+                users_df[["username", "role"]],
+                use_container_width=True,
+                hide_index=True
             )
 
 except Exception as e:
