@@ -153,14 +153,13 @@ try:
 
     # ── NOTIFIKASI ──
     perlu_servis = df[df["Status"].str.lower().str.contains("perbaikan|rusak", na=False)]
-    if not perlu_servis.empty:
-        with st.expander(f"⚠️ {len(perlu_servis)} Laptop Perlu Perhatian!", expanded=True):
-            st.dataframe(
-                perlu_servis[["No Aset", "Model", "Serial Number", "User", "Bu Owner", "Status", "Notes"]],
-                use_container_width=True
-            )
 
-    tab1, tab2, tab3 = st.tabs(["📋 Data", "📊 Chart", "➕ Tambah / Edit / Hapus"])
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📋 Data",
+        "📊 Chart",
+        "➕ Tambah / Edit / Hapus",
+        f"⚠️ Perlu Perhatian ({len(perlu_servis)})"
+    ])
 
     # ── TAB 1 : DATA ──
     with tab1:
@@ -265,6 +264,17 @@ try:
                 save_data(new_df)
                 st.success("Data berhasil dihapus!")
                 st.rerun()
+
+    # ── TAB 4 : PERLU PERHATIAN ──
+    with tab4:
+        st.subheader(f"⚠️ {len(perlu_servis)} Laptop Perlu Perhatian")
+        if perlu_servis.empty:
+            st.success("Semua laptop dalam kondisi baik!")
+        else:
+            st.dataframe(
+                perlu_servis[["No Aset", "Model", "Serial Number", "User", "Bu Owner", "Status", "Notes"]],
+                use_container_width=True
+            )
 
 except Exception as e:
     import traceback
