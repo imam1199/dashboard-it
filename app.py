@@ -7,7 +7,6 @@ from io import BytesIO
 import json
 
 st.set_page_config(page_title="Dashboard IT Asset", layout="wide")
-st.title("Dashboard IT Asset Umara Group")
 
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
@@ -16,6 +15,33 @@ SCOPES = [
 
 SHEET_ID = "1msf4IK1ZJReQl5f_6VRbVCsGiJXcHUHENto1DqrQwkY"
 JSON_FILE = "dashboard-laptop-it-92f648a3958c.json"
+
+# ── LOGIN ──
+USERS = {
+    "admin": "admin123",
+    "it": "itumara2024",
+}
+
+def login():
+    st.title("🔐 Login Dashboard IT Asset")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Login", use_container_width=True):
+            if username in USERS and USERS[username] == password:
+                st.session_state["logged_in"] = True
+                st.session_state["username"] = username
+                st.rerun()
+            else:
+                st.error("Username atau password salah!")
+
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = False
+
+if not st.session_state["logged_in"]:
+    login()
+    st.stop()
 
 MODEL_CODE = {
     "Lenovo Ideapad 5": "LNV-IP5",
@@ -96,8 +122,43 @@ COLUMN_CONFIG = {
     "Status": st.column_config.TextColumn("Status", width="medium"),
 }
 
+# ── HEADER ──
+col_title, col_logout = st.columns([6, 1])
+with col_title:
+    st.title("Dashboard IT Asset Umara Group")
+with col_logout:
+    st.write(f"👤 {st.session_state['username']}")
+    if st.button("Logout"):
+        st.session_state["logged_in"] = False
+        st.rerun()
+
 try:
     df = load_data()
+
+    # ── SUMMARY ──
+    total = len(df)
+    dipakai = len(df[df["Status"].str.lower().str.contains("pakai", na=False)])
+    rusak = len(df[df["Status"].str.lower().str.contains("rusak", na=False)])
+    servis = len(df[df["Status"].str.lower().str.contains("perbaikan", na=False)])
+    tersedia = len(df[df["Status"].str.lower().str.contains("tersedia", na=False)])
+
+    s1, s2, s3, s4, s5 = st.columns(5)
+    s1.metric("💻 Total Asset", total)
+    s2.metric("✅ Di Pakai", dipakai)
+    s3.metric("🔧 Perlu Perbaikan", servis)
+    s4.metric("❌ Rusak", rusak)
+    s5.metric("📦 Tersedia", tersedia)
+
+    st.divider()
+
+    # ── NOTIFIKASI ──
+    perlu_servis = df[df["Status"].str.lower().str.contains("perbaikan|rusak", na=False)]
+    if not perlu_servis.empty:
+        with st.expander(f"⚠️ {len(perlu_servis)} Laptop Perlu Perhatian!", expanded=True):
+            st.dataframe(
+                perlu_servis[["No Aset", "Model", "Serial Number", "User", "Bu Owner", "Status", "Notes"]],
+                use_container_width=True
+            )
 
     tab1, tab2, tab3 = st.tabs(["📋 Data", "📊 Chart", "➕ Tambah / Edit / Hapus"])
 
