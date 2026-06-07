@@ -51,13 +51,18 @@ MODEL_CODE = {
     "Lenovo V14 G2-ALC": "LNV-V14G2",
     "Lenovo V14 G3-IAP": "LNV-V14G3",
     "Lenovo V14 G3 IAP": "LNV-V14G3",
+    "Lenovo V14 G2-ITL": "LNV-V14G2ITL",
     "Lenovo Ideapad 330": "LNV-IP330",
     "Lenovo G40 G9": "LNV-G40G9",
+    "Lenovo G40 G6": "LNV-G40G6",
+    "Lenovo G40-30": "LNV-G40-30",
     "Lenovo Yoga 730": "LNV-YG730",
     "Lenovo Thinkpad E490": "LNV-TPE490",
     "Lenovo K14 Gen 1": "LNV-K14G1",
-    "Lenovo G40 G6": "LNV-G40G6",
+    "Lenovo Legion 5": "LNV-LEG5",
     "HP 240 G6": "HP-240G6",
+    "HP 240 G8": "HP-240G8",
+    "HP 240 G9": "HP-240G9",
     "HP 240 G4 G3-IAP": "HP-240G4",
     "HP 14-bw515AU": "HP-14BW",
     "HP Aspire ES 11": "HP-ASPES11",
@@ -70,6 +75,7 @@ MODEL_CODE = {
     "Acer Aspire 3": "ACR-ASP3",
     "Dell Latitude 3490": "DELL-LAT3490",
     "Dell Latitude 3400": "DELL-LAT3400",
+    "Dell Latitude 5300": "DELL-LAT5300",
 }
 
 def generate_asset_numbers(df):
@@ -151,7 +157,6 @@ try:
 
     st.divider()
 
-    # ── NOTIFIKASI ──
     perlu_servis = df[df["Status"].str.lower().str.contains("perbaikan|rusak", na=False)]
 
     tab1, tab2, tab3, tab4 = st.tabs([
