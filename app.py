@@ -81,6 +81,21 @@ def save_data(df):
     sheet.update(range_name='A1', values=[df.columns.tolist()] + df.fillna("").values.tolist())
     st.cache_data.clear()
 
+COLUMN_CONFIG = {
+    "No Aset": st.column_config.TextColumn("No Aset", width="medium"),
+    "Model": st.column_config.TextColumn("Model", width="large"),
+    "Serial Number": st.column_config.TextColumn("Serial Number", width="medium"),
+    "Job Title": st.column_config.TextColumn("Job Title", width="large"),
+    "User": st.column_config.TextColumn("User", width="medium"),
+    "Notes": st.column_config.TextColumn("Notes", width="large"),
+    "Buy date": st.column_config.TextColumn("Buy date", width="medium"),
+    "Handover Date": st.column_config.TextColumn("Handover Date", width="medium"),
+    "Return Date": st.column_config.TextColumn("Return Date", width="medium"),
+    "Bu Owner": st.column_config.TextColumn("Bu Owner", width="small"),
+    "Bu User": st.column_config.TextColumn("Bu User", width="small"),
+    "Status": st.column_config.TextColumn("Status", width="medium"),
+}
+
 try:
     df = load_data()
 
@@ -110,7 +125,7 @@ try:
                 lambda row: row.astype(str).str.contains(search, case=False).any(), axis=1
             )]
 
-        st.dataframe(filtered, use_container_width=True)
+        st.dataframe(filtered, use_container_width=True, column_config=COLUMN_CONFIG)
         st.caption(f"Total: {len(filtered)} data")
 
         col_exp1, col_exp2 = st.columns(2)
@@ -156,7 +171,7 @@ try:
         action = st.radio("Pilih Aksi", ["✏️ Edit Data", "➕ Tambah Data", "🗑️ Hapus Data"], horizontal=True)
 
         if action == "✏️ Edit Data":
-            edited = st.data_editor(df, num_rows="fixed", use_container_width=True)
+            edited = st.data_editor(df, num_rows="fixed", use_container_width=True, column_config=COLUMN_CONFIG)
             if st.button("💾 Simpan Perubahan"):
                 save_data(edited)
                 st.success("Data berhasil disimpan!")
@@ -168,7 +183,7 @@ try:
             for i, col in enumerate(df.columns):
                 with cols[i % 3]:
                     if col == "No Aset":
-                        new_row[col] = ""  # auto generate nanti
+                        new_row[col] = ""
                     else:
                         new_row[col] = st.text_input(col)
             if st.button("➕ Tambah"):
@@ -179,7 +194,7 @@ try:
                 st.rerun()
 
         elif action == "🗑️ Hapus Data":
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df, use_container_width=True, column_config=COLUMN_CONFIG)
             row_idx = st.number_input("Nomor baris yang dihapus (mulai dari 0)",
                                       min_value=0, max_value=len(df)-1, step=1)
             st.warning(f"Akan menghapus: {df.iloc[int(row_idx)].to_dict()}")
