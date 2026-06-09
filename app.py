@@ -44,6 +44,25 @@ def get_users_sheet():
         sheet.append_row(["it", hash_password("itumara2024"), "user"])
         return sheet
 
+def get_riwayat_sheet():
+    client = get_client()
+    spreadsheet = client.open_by_key(SHEET_ID)
+    try:
+        return spreadsheet.worksheet("riwayat")
+    except:
+        sheet = spreadsheet.add_worksheet(title="riwayat", rows=1000, cols=5)
+        sheet.append_row(["Waktu", "User", "Aksi", "Detail", "No Aset"])
+        return sheet
+
+def catat_riwayat(aksi, detail, no_aset="-"):
+    try:
+        sheet = get_riwayat_sheet()
+        waktu = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        user = st.session_state.get("username", "-")
+        sheet.append_row([waktu, user, aksi, detail, no_aset])
+    except:
+        pass
+
 @st.cache_data(ttl=10)
 def load_users():
     sheet = get_users_sheet()
@@ -94,6 +113,7 @@ def login():
                 st.session_state["logged_in"] = True
                 st.session_state["username"] = username
                 st.session_state["role"] = get_user_role(username)
+                catat_riwayat("Login", f"User {username} login")
                 st.rerun()
             else:
                 st.error("Username atau password salah!")
@@ -176,11 +196,18 @@ def load_data():
     df = df.loc[:, ~df.columns.str.contains('auto_unique_id')]
     return df
 
-def save_data(df):
+@st.cache_data(ttl=30)
+def load_riwayat():
+    sheet = get_riwayat_sheet()
+    data = sheet.get_all_records()
+    return pd.DataFrame(data) if data else pd.DataFrame(columns=["Waktu", "User", "Aksi", "Detail", "No Aset"])
+
+def save_data(df, aksi="Edit", detail="", no_aset="-"):
     client = get_client()
     sheet = client.open_by_key(SHEET_ID).sheet1
     sheet.clear()
     sheet.update(range_name='A1', values=[df.columns.tolist()] + df.fillna("").values.tolist())
+    catat_riwayat(aksi, detail, no_aset)
     st.cache_data.clear()
 
 COLUMN_CONFIG = {
@@ -206,6 +233,7 @@ with col_title:
 with col_logout:
     st.write(f"👤 {st.session_state['username']}")
     if st.button("Logout"):
+        catat_riwayat("Logout", f"User {st.session_state['username']} logout")
         st.session_state["logged_in"] = False
         st.rerun()
 
@@ -235,11 +263,12 @@ try:
     perlu_servis = df[df["Status"].str.lower().str.contains("perbaikan|rusak", na=False)]
     laptop_tua = df[df["Umur"].str.contains(r"^[5-9]|^[1-9][0-9]", na=False, regex=True)]
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "📋 Data",
         "📊 Chart",
         "➕ Tambah / Edit / Hapus",
         f"⚠️ Perlu Perhatian ({len(perlu_servis)})",
+        "📜 Riwayat",
         "⚙️ Settings",
         "🔧 Tools"
     ])
@@ -283,7 +312,7 @@ try:
         st.divider()
         if st.button("🔄 Generate Ulang Semua No Aset"):
             df["No Aset"] = generate_asset_numbers(df)
-            save_data(df)
+            save_data(df, "Generate No Aset", "Generate ulang semua No Aset")
             st.success("No Aset berhasil di-generate!")
             st.rerun()
 
@@ -316,7 +345,7 @@ try:
         if action == "✏️ Edit Data":
             edited = st.data_editor(df, num_rows="fixed", use_container_width=True, column_config=COLUMN_CONFIG)
             if st.button("💾 Simpan Perubahan"):
-                save_data(edited)
+                save_data(edited, "Edit Data", "Edit data laptop")
                 st.success("Data berhasil disimpan!")
                 st.rerun()
 
@@ -332,7 +361,9 @@ try:
             if st.button("➕ Tambah"):
                 new_df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
                 new_df["No Aset"] = generate_asset_numbers(new_df)
-                save_data(new_df)
+                save_data(new_df, "Tambah Data",
+                         f"Tambah laptop {new_row.get('Model','-')} SN:{new_row.get('Serial Number','-')}",
+                         new_df.iloc[-1]["No Aset"])
                 st.success("Data berhasil ditambahkan!")
                 st.rerun()
 
@@ -340,11 +371,14 @@ try:
             st.dataframe(df, use_container_width=True, column_config=COLUMN_CONFIG)
             row_idx = st.number_input("Nomor baris yang dihapus (mulai dari 0)",
                                       min_value=0, max_value=len(df)-1, step=1)
-            st.warning(f"Akan menghapus: {df.iloc[int(row_idx)].to_dict()}")
+            hapus_row = df.iloc[int(row_idx)]
+            st.warning(f"Akan menghapus: {hapus_row.to_dict()}")
             if st.button("🗑️ Hapus"):
                 new_df = df.drop(index=int(row_idx)).reset_index(drop=True)
                 new_df["No Aset"] = generate_asset_numbers(new_df)
-                save_data(new_df)
+                save_data(new_df, "Hapus Data",
+                         f"Hapus laptop {hapus_row.get('Model','-')} SN:{hapus_row.get('Serial Number','-')}",
+                         hapus_row.get("No Aset", "-"))
                 st.success("Data berhasil dihapus!")
                 st.rerun()
 
@@ -369,8 +403,52 @@ try:
                 use_container_width=True
             )
 
-    # ── TAB 5 : SETTINGS ──
+    # ── TAB 5 : RIWAYAT ──
     with tab5:
+        st.subheader("📜 Riwayat Aktivitas")
+
+        riwayat_df = load_riwayat()
+
+        if riwayat_df.empty:
+            st.info("Belum ada riwayat aktivitas.")
+        else:
+            # Filter riwayat
+            col1, col2 = st.columns(2)
+            with col1:
+                filter_user_r = st.multiselect("Filter User", options=sorted(riwayat_df["User"].dropna().unique()))
+            with col2:
+                filter_aksi_r = st.multiselect("Filter Aksi", options=sorted(riwayat_df["Aksi"].dropna().unique()))
+
+            filtered_r = riwayat_df.copy()
+            if filter_user_r:
+                filtered_r = filtered_r[filtered_r["User"].isin(filter_user_r)]
+            if filter_aksi_r:
+                filtered_r = filtered_r[filtered_r["Aksi"].isin(filter_aksi_r)]
+
+            # Tampilkan terbaru di atas
+            st.dataframe(
+                filtered_r.iloc[::-1].reset_index(drop=True),
+                use_container_width=True
+            )
+            st.caption(f"Total: {len(filtered_r)} aktivitas")
+
+            # Export riwayat
+            buffer_r = BytesIO()
+            with pd.ExcelWriter(buffer_r, engine='openpyxl') as writer:
+                filtered_r.to_excel(writer, index=False)
+            st.download_button("📥 Export Riwayat Excel", buffer_r.getvalue(), file_name="riwayat_aktivitas.xlsx")
+
+            if st.session_state.get("role") == "admin":
+                if st.button("🗑️ Hapus Semua Riwayat"):
+                    sheet = get_riwayat_sheet()
+                    sheet.clear()
+                    sheet.append_row(["Waktu", "User", "Aksi", "Detail", "No Aset"])
+                    st.cache_data.clear()
+                    st.success("Riwayat berhasil dihapus!")
+                    st.rerun()
+
+    # ── TAB 6 : SETTINGS ──
+    with tab6:
         st.subheader("⚙️ Pengaturan Akun")
         current_user = st.session_state["username"]
         is_admin = st.session_state.get("role") == "admin"
@@ -390,6 +468,7 @@ try:
                     st.error("Password minimal 6 karakter!")
                 else:
                     save_user(current_user, new_pass, st.session_state.get("role", "user"))
+                    catat_riwayat("Ganti Password", f"User {current_user} ganti password")
                     st.success("Password berhasil diubah!")
 
         if is_admin:
@@ -411,6 +490,7 @@ try:
                         st.error("Password minimal 6 karakter!")
                     else:
                         save_user(new_username, new_user_pass, new_user_role)
+                        catat_riwayat("Tambah User", f"Tambah user {new_username} role {new_user_role}")
                         st.success(f"User '{new_username}' berhasil ditambahkan!")
                         st.rerun()
 
@@ -422,6 +502,7 @@ try:
                     del_user = st.selectbox("Pilih User", options=user_list)
                     if st.button("🗑️ Hapus User"):
                         delete_user(del_user)
+                        catat_riwayat("Hapus User", f"Hapus user {del_user}")
                         st.success(f"User '{del_user}' berhasil dihapus!")
                         st.rerun()
                 else:
@@ -432,8 +513,8 @@ try:
             users_df = load_users()
             st.dataframe(users_df[["username", "role"]], use_container_width=True, hide_index=True)
 
-    # ── TAB 6 : TOOLS ──
-    with tab6:
+    # ── TAB 7 : TOOLS ──
+    with tab7:
         tool = st.radio("Pilih Tool", ["📲 QR Code", "📤 Import Excel/CSV"], horizontal=True)
 
         if tool == "📲 QR Code":
@@ -497,7 +578,7 @@ try:
                             new_df = import_df.copy()
 
                         new_df["No Aset"] = generate_asset_numbers(new_df)
-                        save_data(new_df)
+                        save_data(new_df, "Import Data", f"Import {len(import_df)} data dari {uploaded_file.name}")
                         st.success(f"Berhasil import {len(import_df)} data!")
                         st.rerun()
 
