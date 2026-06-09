@@ -6,6 +6,8 @@ from google.oauth2 import service_account
 from io import BytesIO
 import json
 import hashlib
+import segno
+import datetime
 
 st.set_page_config(page_title="Dashboard IT Asset", layout="wide")
 
@@ -36,10 +38,8 @@ def get_users_sheet():
     try:
         return spreadsheet.worksheet("users")
     except:
-        # Buat sheet users kalau belum ada
         sheet = spreadsheet.add_worksheet(title="users", rows=100, cols=3)
         sheet.append_row(["username", "password", "role"])
-        # Tambah default admin
         sheet.append_row(["admin", hash_password("admin123"), "admin"])
         sheet.append_row(["it", hash_password("itumara2024"), "user"])
         return sheet
@@ -54,7 +54,6 @@ def save_user(username, password, role="user"):
     sheet = get_users_sheet()
     users_df = load_users()
     if username in users_df["username"].values:
-        # Update password
         cell = sheet.find(username)
         sheet.update_cell(cell.row, 2, hash_password(password))
     else:
@@ -84,7 +83,6 @@ def get_user_role(username):
         return "user"
     return user_row.iloc[0]["role"]
 
-# ── LOGIN ──
 def login():
     st.title("🔐 Login Dashboard IT Asset")
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -153,6 +151,23 @@ def generate_asset_numbers(df):
         new_no_aset.append(f"{code}-{counters[code]:03d}")
     return new_no_aset
 
+def hitung_umur(buy_date_str):
+    try:
+        if not buy_date_str or str(buy_date_str).strip() in ["-", "", "nan"]:
+            return "-"
+        buy_date = pd.to_datetime(buy_date_str)
+        umur = (datetime.datetime.now() - buy_date).days // 365
+        return f"{umur} tahun"
+    except:
+        return "-"
+
+def generate_qr(data_text):
+    qr = segno.make(data_text)
+    buffer = BytesIO()
+    qr.save(buffer, kind='png', scale=6)
+    buffer.seek(0)
+    return buffer
+
 @st.cache_data(ttl=30)
 def load_data():
     client = get_client()
@@ -181,6 +196,7 @@ COLUMN_CONFIG = {
     "Bu Owner": st.column_config.TextColumn("Bu Owner", width="small"),
     "Bu User": st.column_config.TextColumn("Bu User", width="small"),
     "Status": st.column_config.TextColumn("Status", width="medium"),
+    "Umur": st.column_config.TextColumn("Umur", width="small"),
 }
 
 # ── HEADER ──
@@ -196,29 +212,36 @@ with col_logout:
 try:
     df = load_data()
 
+    if "Buy date" in df.columns:
+        df["Umur"] = df["Buy date"].apply(hitung_umur)
+
     total = len(df)
     dipakai = len(df[df["Status"].str.lower().str.contains("pakai", na=False)])
     rusak = len(df[df["Status"].str.lower().str.contains("rusak", na=False)])
     servis = len(df[df["Status"].str.lower().str.contains("perbaikan", na=False)])
     tersedia = len(df[df["Status"].str.lower().str.contains("tersedia", na=False)])
+    tua = len(df[df["Umur"].str.contains(r"^[5-9]|^[1-9][0-9]", na=False, regex=True)])
 
-    s1, s2, s3, s4, s5 = st.columns(5)
+    s1, s2, s3, s4, s5, s6 = st.columns(6)
     s1.metric("💻 Total Asset", total)
     s2.metric("✅ Di Pakai", dipakai)
     s3.metric("🔧 Perlu Perbaikan", servis)
     s4.metric("❌ Rusak", rusak)
     s5.metric("📦 Tersedia", tersedia)
+    s6.metric("⏰ Laptop Tua (>5th)", tua)
 
     st.divider()
 
     perlu_servis = df[df["Status"].str.lower().str.contains("perbaikan|rusak", na=False)]
+    laptop_tua = df[df["Umur"].str.contains(r"^[5-9]|^[1-9][0-9]", na=False, regex=True)]
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📋 Data",
         "📊 Chart",
         "➕ Tambah / Edit / Hapus",
         f"⚠️ Perlu Perhatian ({len(perlu_servis)})",
-        "⚙️ Settings"
+        "⚙️ Settings",
+        "🔧 Tools"
     ])
 
     # ── TAB 1 : DATA ──
@@ -302,7 +325,7 @@ try:
             cols = st.columns(3)
             for i, col in enumerate(df.columns):
                 with cols[i % 3]:
-                    if col == "No Aset":
+                    if col in ["No Aset", "Umur"]:
                         new_row[col] = ""
                     else:
                         new_row[col] = st.text_input(col)
@@ -336,13 +359,22 @@ try:
                 use_container_width=True
             )
 
+        st.divider()
+        st.subheader(f"⏰ {len(laptop_tua)} Laptop Tua (>5 Tahun)")
+        if laptop_tua.empty:
+            st.success("Tidak ada laptop tua!")
+        else:
+            st.dataframe(
+                laptop_tua[["No Aset", "Model", "Serial Number", "User", "Bu Owner", "Buy date", "Umur", "Status"]],
+                use_container_width=True
+            )
+
     # ── TAB 5 : SETTINGS ──
     with tab5:
         st.subheader("⚙️ Pengaturan Akun")
         current_user = st.session_state["username"]
         is_admin = st.session_state.get("role") == "admin"
 
-        # Ganti password sendiri
         st.markdown("### 🔑 Ganti Password")
         col1, col2 = st.columns(2)
         with col1:
@@ -360,11 +392,9 @@ try:
                     save_user(current_user, new_pass, st.session_state.get("role", "user"))
                     st.success("Password berhasil diubah!")
 
-        # Kelola user (khusus admin)
         if is_admin:
             st.divider()
             st.markdown("### 👥 Kelola User (Admin Only)")
-
             col3, col4 = st.columns(2)
             with col3:
                 st.markdown("**Tambah User Baru**")
@@ -400,11 +430,79 @@ try:
             st.divider()
             st.markdown("**Daftar User Aktif**")
             users_df = load_users()
-            st.dataframe(
-                users_df[["username", "role"]],
-                use_container_width=True,
-                hide_index=True
-            )
+            st.dataframe(users_df[["username", "role"]], use_container_width=True, hide_index=True)
+
+    # ── TAB 6 : TOOLS ──
+    with tab6:
+        tool = st.radio("Pilih Tool", ["📲 QR Code", "📤 Import Excel/CSV"], horizontal=True)
+
+        if tool == "📲 QR Code":
+            st.subheader("📲 Generate QR Code Laptop")
+            no_aset_list = df["No Aset"].dropna().unique().tolist()
+            no_aset_list = [x for x in no_aset_list if x not in ["-", ""]]
+            selected = st.selectbox("Pilih No Aset", options=sorted(no_aset_list))
+
+            if selected:
+                row = df[df["No Aset"] == selected].iloc[0]
+                info_text = (
+                    f"No Aset: {row.get('No Aset', '-')}\n"
+                    f"Model: {row.get('Model', '-')}\n"
+                    f"Serial: {row.get('Serial Number', '-')}\n"
+                    f"User: {row.get('User', '-')}\n"
+                    f"Bu: {row.get('Bu Owner', '-')}\n"
+                    f"Status: {row.get('Status', '-')}"
+                )
+
+                col_qr, col_info = st.columns(2)
+                with col_qr:
+                    qr_buffer = generate_qr(info_text)
+                    st.image(qr_buffer, caption=f"QR Code - {selected}", width=250)
+                    st.download_button(
+                        "📥 Download QR Code",
+                        data=generate_qr(info_text),
+                        file_name=f"qr_{selected}.png",
+                        mime="image/png"
+                    )
+                with col_info:
+                    st.markdown("**Detail Laptop:**")
+                    st.markdown(f"**No Aset:** {row.get('No Aset', '-')}")
+                    st.markdown(f"**Model:** {row.get('Model', '-')}")
+                    st.markdown(f"**Serial Number:** {row.get('Serial Number', '-')}")
+                    st.markdown(f"**User:** {row.get('User', '-')}")
+                    st.markdown(f"**Bu Owner:** {row.get('Bu Owner', '-')}")
+                    st.markdown(f"**Status:** {row.get('Status', '-')}")
+                    st.markdown(f"**Umur:** {row.get('Umur', '-')}")
+
+        elif tool == "📤 Import Excel/CSV":
+            st.subheader("📤 Import Data dari Excel/CSV")
+            st.info("Upload file Excel/CSV dengan format kolom yang sama seperti data yang ada.")
+
+            uploaded_file = st.file_uploader("Upload File", type=["xlsx", "csv"])
+            if uploaded_file:
+                try:
+                    if uploaded_file.name.endswith(".csv"):
+                        import_df = pd.read_csv(uploaded_file)
+                    else:
+                        import_df = pd.read_excel(uploaded_file)
+
+                    st.write(f"Preview data ({len(import_df)} baris):")
+                    st.dataframe(import_df.head(10), use_container_width=True)
+
+                    mode = st.radio("Mode Import", ["Tambah ke data yang ada", "Ganti semua data"], horizontal=True)
+
+                    if st.button("📤 Import Sekarang"):
+                        if mode == "Tambah ke data yang ada":
+                            new_df = pd.concat([df, import_df], ignore_index=True)
+                        else:
+                            new_df = import_df.copy()
+
+                        new_df["No Aset"] = generate_asset_numbers(new_df)
+                        save_data(new_df)
+                        st.success(f"Berhasil import {len(import_df)} data!")
+                        st.rerun()
+
+                except Exception as ex:
+                    st.error(f"Error membaca file: {ex}")
 
 except Exception as e:
     import traceback
