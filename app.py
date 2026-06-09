@@ -345,7 +345,18 @@ try:
         if action == "✏️ Edit Data":
             edited = st.data_editor(df, num_rows="fixed", use_container_width=True, column_config=COLUMN_CONFIG)
             if st.button("💾 Simpan Perubahan"):
-                save_data(edited, "Edit Data", "Edit data laptop")
+                changes = []
+                for idx in range(min(len(df), len(edited))):
+                    for col in df.columns:
+                        if col == "Umur":
+                            continue
+                        val_lama = str(df.iloc[idx].get(col, ""))
+                        val_baru = str(edited.iloc[idx].get(col, ""))
+                        if val_lama != val_baru:
+                            no_aset = str(df.iloc[idx].get("No Aset", "-"))
+                            changes.append(f"[{no_aset}] {col}: '{val_lama}' → '{val_baru}'")
+                detail = " | ".join(changes) if changes else "Tidak ada perubahan"
+                save_data(edited, "Edit Data", detail)
                 st.success("Data berhasil disimpan!")
                 st.rerun()
 
@@ -361,9 +372,9 @@ try:
             if st.button("➕ Tambah"):
                 new_df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
                 new_df["No Aset"] = generate_asset_numbers(new_df)
-                save_data(new_df, "Tambah Data",
-                         f"Tambah laptop {new_row.get('Model','-')} SN:{new_row.get('Serial Number','-')}",
-                         new_df.iloc[-1]["No Aset"])
+                no_aset_baru = new_df.iloc[-1]["No Aset"]
+                detail = f"Tambah laptop {new_row.get('Model','-')} | SN: {new_row.get('Serial Number','-')} | User: {new_row.get('User','-')} | Status: {new_row.get('Status','-')}"
+                save_data(new_df, "Tambah Data", detail, no_aset_baru)
                 st.success("Data berhasil ditambahkan!")
                 st.rerun()
 
@@ -374,11 +385,10 @@ try:
             hapus_row = df.iloc[int(row_idx)]
             st.warning(f"Akan menghapus: {hapus_row.to_dict()}")
             if st.button("🗑️ Hapus"):
+                detail = f"Hapus laptop {hapus_row.get('Model','-')} | SN: {hapus_row.get('Serial Number','-')} | User: {hapus_row.get('User','-')} | Status: {hapus_row.get('Status','-')}"
                 new_df = df.drop(index=int(row_idx)).reset_index(drop=True)
                 new_df["No Aset"] = generate_asset_numbers(new_df)
-                save_data(new_df, "Hapus Data",
-                         f"Hapus laptop {hapus_row.get('Model','-')} SN:{hapus_row.get('Serial Number','-')}",
-                         hapus_row.get("No Aset", "-"))
+                save_data(new_df, "Hapus Data", detail, hapus_row.get("No Aset", "-"))
                 st.success("Data berhasil dihapus!")
                 st.rerun()
 
@@ -406,13 +416,11 @@ try:
     # ── TAB 5 : RIWAYAT ──
     with tab5:
         st.subheader("📜 Riwayat Aktivitas")
-
         riwayat_df = load_riwayat()
 
         if riwayat_df.empty:
             st.info("Belum ada riwayat aktivitas.")
         else:
-            # Filter riwayat
             col1, col2 = st.columns(2)
             with col1:
                 filter_user_r = st.multiselect("Filter User", options=sorted(riwayat_df["User"].dropna().unique()))
@@ -425,14 +433,12 @@ try:
             if filter_aksi_r:
                 filtered_r = filtered_r[filtered_r["Aksi"].isin(filter_aksi_r)]
 
-            # Tampilkan terbaru di atas
             st.dataframe(
                 filtered_r.iloc[::-1].reset_index(drop=True),
                 use_container_width=True
             )
             st.caption(f"Total: {len(filtered_r)} aktivitas")
 
-            # Export riwayat
             buffer_r = BytesIO()
             with pd.ExcelWriter(buffer_r, engine='openpyxl') as writer:
                 filtered_r.to_excel(writer, index=False)
