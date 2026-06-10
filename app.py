@@ -112,7 +112,7 @@ def login():
             except:
                 pass
         with col_judul:
-            st.markdown("<h2 style='padding-top:15px'>Login Dashboard IT Asset</h2>", unsafe_allow_html=True)
+            st.markdown("<h2 style='padding-top:15px; white-space:nowrap'>Login Dashboard IT Asset</h2>", unsafe_allow_html=True)
 
         st.divider()
         username = st.text_input("Username")
