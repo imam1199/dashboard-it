@@ -105,12 +105,16 @@ def get_user_role(username):
 def login():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # Logo
-        try:
-            st.image("logo.png", width=250)
-        except:
-            pass
-        st.title(" Login Dashboard IT Asset")
+        col_logo, col_judul = st.columns([1, 3])
+        with col_logo:
+            try:
+                st.image("logo.png", width=80)
+            except:
+                pass
+        with col_judul:
+            st.markdown("<h2 style='padding-top:15px'>Login Dashboard IT Asset</h2>", unsafe_allow_html=True)
+
+        st.divider()
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         if st.button("Login", use_container_width=True):
@@ -234,11 +238,14 @@ COLUMN_CONFIG = {
 # ── HEADER ──
 col_title, col_logout = st.columns([6, 1])
 with col_title:
-    try:
-        st.image("logo.png", width=120)
-    except:
-        pass
-    st.title("Dashboard IT Asset Umara Group")
+    col_logo, col_judul = st.columns([1, 8])
+    with col_logo:
+        try:
+            st.image("logo.png", width=80)
+        except:
+            pass
+    with col_judul:
+        st.markdown("<h2 style='padding-top:10px'>Dashboard IT Asset Umara Group</h2>", unsafe_allow_html=True)
 with col_logout:
     st.write(f"👤 {st.session_state['username']}")
     if st.button("Logout"):
