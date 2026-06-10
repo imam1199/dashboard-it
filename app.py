@@ -103,9 +103,14 @@ def get_user_role(username):
     return user_row.iloc[0]["role"]
 
 def login():
-    st.title("🔐 Login Dashboard IT Asset")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
+        # Logo
+        try:
+            st.image("logo.png", width=250)
+        except:
+            pass
+        st.title("🔐 Login Dashboard IT Asset")
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         if st.button("Login", use_container_width=True):
@@ -229,6 +234,10 @@ COLUMN_CONFIG = {
 # ── HEADER ──
 col_title, col_logout = st.columns([6, 1])
 with col_title:
+    try:
+        st.image("logo.png", width=120)
+    except:
+        pass
     st.title("Dashboard IT Asset Umara Group")
 with col_logout:
     st.write(f"👤 {st.session_state['username']}")
@@ -433,10 +442,7 @@ try:
             if filter_aksi_r:
                 filtered_r = filtered_r[filtered_r["Aksi"].isin(filter_aksi_r)]
 
-            st.dataframe(
-                filtered_r.iloc[::-1].reset_index(drop=True),
-                use_container_width=True
-            )
+            st.dataframe(filtered_r.iloc[::-1].reset_index(drop=True), use_container_width=True)
             st.caption(f"Total: {len(filtered_r)} aktivitas")
 
             buffer_r = BytesIO()
