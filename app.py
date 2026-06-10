@@ -110,7 +110,7 @@ def login():
             st.image("logo.png", width=250)
         except:
             pass
-        st.title("🔐 Login Dashboard IT Asset")
+        st.title(" Login Dashboard IT Asset")
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         if st.button("Login", use_container_width=True):
