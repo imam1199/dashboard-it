@@ -113,7 +113,6 @@ def login():
                 pass
         with col_judul:
             st.markdown("<h2 style='padding-top:15px; white-space:nowrap'>Login Dashboard IT Asset</h2>", unsafe_allow_html=True)
-
         st.divider()
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
@@ -359,20 +358,36 @@ try:
         action = st.radio("Pilih Aksi", ["✏️ Edit Data", "➕ Tambah Data", "🗑️ Hapus Data"], horizontal=True)
 
         if action == "✏️ Edit Data":
-            edited = st.data_editor(df, num_rows="fixed", use_container_width=True, column_config=COLUMN_CONFIG)
+            search_edit = st.text_input("🔍 Cari data yang mau diedit", key="search_edit")
+            df_edit = df.copy()
+            if search_edit:
+                df_edit = df_edit[df_edit.apply(
+                    lambda row: row.astype(str).str.contains(search_edit, case=False).any(), axis=1
+                )]
+            st.caption(f"Menampilkan {len(df_edit)} data")
+            edited = st.data_editor(df_edit, num_rows="fixed", use_container_width=True, column_config=COLUMN_CONFIG)
             if st.button("💾 Simpan Perubahan"):
-                changes = []
-                for idx in range(min(len(df), len(edited))):
+                # Merge edited back ke df asli
+                df_result = df.copy()
+                for idx in edited.index:
                     for col in df.columns:
                         if col == "Umur":
                             continue
-                        val_lama = str(df.iloc[idx].get(col, ""))
-                        val_baru = str(edited.iloc[idx].get(col, ""))
+                        df_result.at[idx, col] = edited.at[idx, col]
+
+                changes = []
+                for idx in edited.index:
+                    for col in df.columns:
+                        if col == "Umur":
+                            continue
+                        val_lama = str(df.at[idx, col])
+                        val_baru = str(edited.at[idx, col])
                         if val_lama != val_baru:
-                            no_aset = str(df.iloc[idx].get("No Aset", "-"))
+                            no_aset = str(df.at[idx, "No Aset"])
                             changes.append(f"[{no_aset}] {col}: '{val_lama}' → '{val_baru}'")
+
                 detail = " | ".join(changes) if changes else "Tidak ada perubahan"
-                save_data(edited, "Edit Data", detail)
+                save_data(df_result, "Edit Data", detail)
                 st.success("Data berhasil disimpan!")
                 st.rerun()
 
@@ -395,18 +410,29 @@ try:
                 st.rerun()
 
         elif action == "🗑️ Hapus Data":
-            st.dataframe(df, use_container_width=True, column_config=COLUMN_CONFIG)
-            row_idx = st.number_input("Nomor baris yang dihapus (mulai dari 0)",
-                                      min_value=0, max_value=len(df)-1, step=1)
-            hapus_row = df.iloc[int(row_idx)]
-            st.warning(f"Akan menghapus: {hapus_row.to_dict()}")
-            if st.button("🗑️ Hapus"):
-                detail = f"Hapus laptop {hapus_row.get('Model','-')} | SN: {hapus_row.get('Serial Number','-')} | User: {hapus_row.get('User','-')} | Status: {hapus_row.get('Status','-')}"
-                new_df = df.drop(index=int(row_idx)).reset_index(drop=True)
-                new_df["No Aset"] = generate_asset_numbers(new_df)
-                save_data(new_df, "Hapus Data", detail, hapus_row.get("No Aset", "-"))
-                st.success("Data berhasil dihapus!")
-                st.rerun()
+            search_hapus = st.text_input("🔍 Cari data yang mau dihapus", key="search_hapus")
+            df_hapus = df.copy()
+            if search_hapus:
+                df_hapus = df_hapus[df_hapus.apply(
+                    lambda row: row.astype(str).str.contains(search_hapus, case=False).any(), axis=1
+                )]
+            st.caption(f"Menampilkan {len(df_hapus)} data")
+            st.dataframe(df_hapus, use_container_width=True, column_config=COLUMN_CONFIG)
+
+            if len(df_hapus) > 0:
+                row_idx = st.number_input("Nomor baris yang dihapus (index asli)",
+                                          min_value=int(df_hapus.index.min()),
+                                          max_value=int(df_hapus.index.max()),
+                                          step=1)
+                hapus_row = df.iloc[int(row_idx)]
+                st.warning(f"Akan menghapus: {hapus_row.to_dict()}")
+                if st.button("🗑️ Hapus"):
+                    detail = f"Hapus laptop {hapus_row.get('Model','-')} | SN: {hapus_row.get('Serial Number','-')} | User: {hapus_row.get('User','-')} | Status: {hapus_row.get('Status','-')}"
+                    new_df = df.drop(index=int(row_idx)).reset_index(drop=True)
+                    new_df["No Aset"] = generate_asset_numbers(new_df)
+                    save_data(new_df, "Hapus Data", detail, hapus_row.get("No Aset", "-"))
+                    st.success("Data berhasil dihapus!")
+                    st.rerun()
 
     # ── TAB 4 : PERLU PERHATIAN ──
     with tab4:
